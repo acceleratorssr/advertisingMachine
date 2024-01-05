@@ -6,7 +6,9 @@
 #include <unistd.h>
 
 #define PORT 9191
+
 char buffer[1024];
+
 void sendFile(int clientSocket, FILE *file, const char *filename)
 {
     // 获取文件大小

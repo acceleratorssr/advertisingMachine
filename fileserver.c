@@ -78,6 +78,14 @@ int main()
     serverAddr.sin_port = htons(PORT);
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
+    // 设置SO_REUSEADDR选项
+    int reuseAddr = 1;
+    if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, sizeof(reuseAddr)) == -1)
+    {
+        perror("Error setting SO_REUSEADDR option");
+        exit(1);
+    }
+
     // 绑定套接字到地址
     if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1)
     {
