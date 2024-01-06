@@ -7,73 +7,70 @@
 
 #define PORT 9191
 
-char buffer[1024];
+#define MAX_PATH_LENGTH 256
 
-void sendFile(int clientSocket, FILE *file, const char *filename)
+void receiveFile(int clientSocket, const char *savePath)
 {
-    // 获取文件大小
-    fseek(file, 0, SEEK_END);
-    long fileSize = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    // 发送文件大小和文件名
-    send(clientSocket, &fileSize, sizeof(fileSize), 0);
-    size_t filenameLength = strlen(filename); // strlen不包含\0
-    filenameLength++;
-
-    send(clientSocket, &filenameLength, sizeof(filenameLength), 0);
-
-    send(clientSocket, filename, filenameLength, 0);
-
-    // 发送文件内容
-    char buffer[2048];
+    FILE *file = NULL; // 初始化文件指针
+    char buffer[1024];
     size_t bytesRead;
-    while ((bytesRead = fread(buffer, 1, sizeof(buffer), file)) > 0)
+
+    // 接收文件大小和文件名
+    long fileSize;
+    recv(clientSocket, &fileSize, sizeof(fileSize), 0);
+    printf("文件大小: %ld\n", fileSize);
+
+    // 接收文件名长度
+    size_t filenameLength;
+    ssize_t receivedBytes = recv(clientSocket, &filenameLength, sizeof(filenameLength), 0);
+    if (receivedBytes != sizeof(filenameLength))
     {
-        if (send(clientSocket, buffer, bytesRead, 0) == -1)
-        {
-            perror("Error sending data to server");
-            exit(1);
-        }
+        perror("Error receiving filename length");
+        exit(1);
     }
+    printf("文件名字长度: %zu\n", filenameLength);
+
+    char filename[MAX_PATH_LENGTH];
+    recv(clientSocket, filename, filenameLength, 0);
+    filename[strlen(filename)] = '\0';
+    printf("文件名字: %s\n", filename);
+
+    // 构建保存文件的完整路径
+    char filePath[MAX_PATH_LENGTH];
+
+    snprintf(filePath, sizeof(filePath), "%s%s", savePath, filename);
+
+    // 创建文件并准备接收文件内容
+    file = fopen(filePath, "wb");
+    if (file == NULL)
+    {
+        perror("Error opening file for writing");
+        exit(1);
+    }
+
+    // 接收文件内容
+    while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
+    {
+        if (strcmp(buffer, "zz^Y^zz") == 0)
+        {
+            printf("get EOF\n");
+            break;
+        }
+        fwrite(buffer, 1, bytesRead, file);
+    }
+
+    fclose(file);
+
+    printf("File received and saved as %s\n", filePath);
 }
 
 int main(int argc, char *argv[])
 {
-
-    FILE *file;
+    char buffer[1024];
+    FILE *file = NULL; // 初始化文件指针
     int clientSocket;
     const char *filePath;
-
-    if (argc != 2)
-    {
-        fprintf(stderr, "Usage: %s <file_path>\n", argv[0]);
-        exit(1);
-    }
-
-    filePath = argv[1];
-
-    // 打开文件
-    file = fopen(filePath, "rb");
-    if (file == NULL)
-    {
-        perror("Error opening file");
-        exit(1);
-    }
-
-    const char *filename = strrchr(filePath, '/'); // 获取文件名
-    if (filename == NULL)
-        filename = filePath; // 如果没有斜杠，整个路径就是文件名
-    else
-        filename++; // 移动到文件名的起始位置
-
-    // 打开文件
-    file = fopen(filePath, "rb");
-    if (file == NULL)
-    {
-        perror("Error opening file");
-        exit(1);
-    }
+    char order;
 
     // 创建套接字
     clientSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -97,10 +94,42 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    sendFile(clientSocket, file, filename);
+    printf("connect successful\n");
+
+    while (1)
+    {
+        ssize_t receivedBytes;
+        char buffer[1024] = {0}; // 初始化所有元素为0
+
+        // 记得-1
+        if ((receivedBytes = recv(clientSocket, &buffer, sizeof(buffer), 0)) == -1)
+        {
+            perror("recv");
+        }
+        printf("receivedBytes: %ld\n", receivedBytes);
+
+        // buffer[receivedBytes] = '\0';
+
+        printf("buffer[0]: %c\n", buffer[0]);
+
+        if (strcmp(buffer, "1") == 0)
+        {
+            printf("hello\n");
+        }
+        else if (strcmp(buffer, "2") == 0)
+        {
+            printf("world\n");
+        }
+        else if (strcmp(buffer, "3") == 0)
+        {
+            receiveFile(clientSocket, "./recv/");
+            printf("out of receiveFile\n");
+        }
+        else
+            break;
+    }
 
     // 关闭套接字和文件
-    fclose(file);
     close(clientSocket);
 
     return 0;

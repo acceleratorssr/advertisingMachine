@@ -6,62 +6,59 @@
 #include <unistd.h>
 
 #define PORT 9191
-#define MAX_PATH_LENGTH 256
 
-void receiveFile(int clientSocket, const char *savePath)
+void sendFile(int clientSocket, FILE *file, const char *filename)
 {
-    FILE *file;
+    // 获取文件大小
+    fseek(file, 0, SEEK_END);
+    long fileSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    // 发送文件大小和文件名
+    send(clientSocket, &fileSize, sizeof(fileSize), 0);
+    size_t filenameLength = strlen(filename); // strlen不包含\0
+    filenameLength++;
+
+    send(clientSocket, &filenameLength, sizeof(filenameLength), 0);
+
+    send(clientSocket, filename, filenameLength, 0);
+
+    // 发送文件内容
     char buffer[1024];
     size_t bytesRead;
-
-    // 接收文件大小和文件名
-    long fileSize;
-    recv(clientSocket, &fileSize, sizeof(fileSize), 0);
-    printf("文件大小: %ld\n", fileSize);
-
-    // 接收文件名长度
-    size_t filenameLength;
-    ssize_t receivedBytes = recv(clientSocket, &filenameLength, sizeof(filenameLength), 0);
-    if (receivedBytes != sizeof(filenameLength))
+    while ((bytesRead = fread(buffer, 1, sizeof(buffer), file)) > 0)
     {
-        perror("Error receiving filename length");
-        exit(1);
-    }
-    printf("文件名字长度: %zu\n", filenameLength);
-
-    char filename[MAX_PATH_LENGTH];
-    recv(clientSocket, filename, filenameLength, 0);
-    filename[strlen(filename)] = '\0';
-    printf("文件名字: %s\n", filename);
-
-    // 构建保存文件的完整路径
-    char filePath[MAX_PATH_LENGTH];
-
-    snprintf(filePath, sizeof(filePath), "%s%s", savePath, filename);
-
-    // 创建文件并准备接收文件内容
-    file = fopen(filePath, "wb");
-    if (file == NULL)
-    {
-        perror("Error opening file for writing");
-        exit(1);
+        if (send(clientSocket, buffer, bytesRead, 0) == -1)
+        {
+            perror("Error sending data to server");
+            exit(1);
+            // break;
+        }
     }
 
-    // 接收文件内容
-    while ((bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0)) > 0)
+    printf("sended EOF\n");
+
+    // 确保此时客户端将接收的数据已经写入文件后，再发送停止符
+    // 否则客户端无法正常接收到停止符
+    // 大概至少：
+    usleep(10000);
+
+    if (send(clientSocket, "zz^Y^zz", sizeof("zz^Y^zz"), 0) == -1)
     {
-        fwrite(buffer, 1, bytesRead, file);
+        perror("Error sending end of file marker to server");
+        exit(1);
     }
 
     fclose(file);
-
-    printf("File received and saved as %s\n", filePath);
 }
 
-int main()
+int main(int agrc, char *argv[])
 {
     int serverSocket, clientSocket;
+    int order;
     char buffer[1024];
+    FILE *file;
+    const char filePath[64] = "./send/ai.png";
 
     // 创建套接字
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -110,7 +107,49 @@ int main()
         exit(1);
     }
 
-    receiveFile(clientSocket, "./recv/");
+    while (order != 0x00)
+    {
+        printf("0x00 == quit\n");
+        scanf("%x", &order);
+        memset(buffer, 0, sizeof(buffer));
+        if (order != 0x01 && order != 0x02 && order != 0x03)
+            break;
+        snprintf(buffer, sizeof(buffer), "%x", order);
+
+        // printf("%c\n", buffer[0]);
+
+        if (send(clientSocket, &buffer, sizeof(buffer), 0) == -1)
+        {
+            perror("send");
+        }
+
+        if (order == 0x03)
+        {
+            // 打开文件
+            file = fopen(filePath, "rb");
+            if (file == NULL)
+            {
+                perror("Error opening file");
+                exit(1);
+            }
+
+            const char *filename = strrchr(filePath, '/'); // 获取文件名
+            if (filename == NULL)
+                filename = filePath; // 如果没有斜杠，整个路径就是文件名
+            else
+                filename++; // 移动到文件名的起始位置
+
+            // 打开文件
+            file = fopen(filePath, "rb");
+            if (file == NULL)
+            {
+                perror("Error opening file");
+                exit(1);
+            }
+
+            sendFile(clientSocket, file, filename);
+        }
+    }
 
     // 关闭套接字
     close(clientSocket);
