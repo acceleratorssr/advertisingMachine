@@ -8,8 +8,17 @@
 
 ## 介绍
 本项目基于GEC6818开发平台，实现一个播放 **.avi格式的视频** 或者切换显示 **24位.bmp格式的图片**的终端设备；利用TCP/IP实现linux端服务器可以与设备进行通信，设备按照传输的命令，执行包括但不限于切换视频，暂停/继续播放视频，传送图片或者视频显示。
-- server/tcp_send为虚拟机运行的服务端
-- out/main为开发板运行的客户端
+- /code/server/tcp_send 为虚拟机运行的服务端
+- /code/out/main 为开发板运行的客户端
+- 将需要展示的.avi和.bmp格式文件放入code/medium内即可
+
+## 使用
+在 /code 下运行：
+```bash
+./a.sh
+```
+即可得到 /code/server 中服务端和 /code/out 中客户端
+
 
 ## 注意
 在yq/sendMessage内代码中
